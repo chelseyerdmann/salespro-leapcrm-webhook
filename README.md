@@ -172,8 +172,147 @@ POST http://localhost:3000/webhook
   - [SalesPro API](https://help.leaptodigital.com/documentation/api-documentation/)
   - [Leap CRM API](https://docs.api.jobprogress.com/)
 
-## Acknowledgments
 
-- SalesPro API Documentation
-- Leap CRM API Documentation
-- Node.js Community
+## Security Best Practices
+
+### 1. API Key Protection
+```javascript
+// .env file
+LEAP_API_KEY=your_api_key_here
+```
+- Never commit `.env` to Git
+- Rotate API keys regularly
+- Use different keys for development/production
+
+### 2. Webhook Security
+```javascript
+// server.js
+const webhookSecret = process.env.WEBHOOK_SECRET;
+
+app.post('/webhook', (req, res) => {
+  // Verify webhook signature
+  const signature = req.headers['x-salespro-signature'];
+  if (!verifySignature(req.body, signature, webhookSecret)) {
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  // Process webhook...
+});
+```
+
+### 3. Rate Limiting
+```javascript
+// server.js
+const rateLimit = require('express-rate-limit');
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100 // limit each IP to 100 requests per windowMs
+});
+
+app.use(limiter);
+```
+
+### 4. Input Validation
+```javascript
+// server.js
+const { body, validationResult } = require('express-validator');
+
+app.post('/webhook', [
+  body('customer.firstName').notEmpty(),
+  body('customer.lastName').notEmpty(),
+  body('customer.emails').isArray(),
+  body('estimate.id').notEmpty()
+], (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+  // Process webhook...
+});
+```
+
+### 5. HTTPS Only
+```javascript
+// server.js
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (!req.secure) {
+      return res.redirect(`https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+}
+```
+
+### 6. Security Headers
+```javascript
+// server.js
+const helmet = require('helmet');
+app.use(helmet());
+```
+
+### Required Dependencies
+```json
+{
+  "dependencies": {
+    "express-rate-limit": "^6.7.0",
+    "express-validator": "^7.0.1",
+    "helmet": "^7.0.0"
+  }
+}
+```
+
+### Security Checklist
+- [ ] API keys stored in environment variables
+- [ ] Webhook signature verification enabled
+- [ ] Rate limiting implemented
+- [ ] Input validation in place
+- [ ] HTTPS enforced in production
+- [ ] Security headers configured
+- [ ] Regular dependency updates
+- [ ] Error messages don't leak sensitive data
+- [ ] Logging configured securely
+- [ ] CORS properly configured
+
+### Regular Maintenance
+1. Update dependencies:
+```bash
+npm audit
+npm update
+```
+
+2. Check for vulnerabilities:
+```bash
+npm audit fix
+```
+
+3. Review access logs regularly
+4. Monitor failed webhook attempts
+5. Rotate API keys quarterly
+
+### Error Handling
+```javascript
+// server.js
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: 'Internal Server Error',
+    // Don't expose internal errors to clients
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
+});
+```
+
+### CORS Configuration
+```javascript
+// server.js
+const cors = require('cors');
+
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS.split(','),
+  methods: ['POST'],
+  allowedHeaders: ['Content-Type', 'x-salespro-signature']
+}));
+```
+
+
