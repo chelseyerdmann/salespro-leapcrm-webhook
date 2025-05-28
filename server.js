@@ -7,7 +7,8 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 
 const app = express();
-const port = process.env.PORT || 3000;
+// Let Render set the port, fallback to 10000 for local development
+const port = process.env.PORT || 10000;
 
 // Validate required environment variables
 if (!process.env.LEAP_API_KEY) {
