@@ -10,6 +10,7 @@ This server acts as a bridge between SalesPro and Leap CRM, handling webhook req
 - Job creation
 - Error handling
 - Logging
+- Security Best Practices
 
 ## Prerequisites
 
