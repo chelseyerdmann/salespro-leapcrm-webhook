@@ -7,13 +7,116 @@ const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 
 const app = express();
-// Let Render set the port, fallback to 10000 for local development
 const port = process.env.PORT || 10000;
+
+// Leap CRM API configuration
+const LEAP_API_BASE_URL = 'https://api.jobprogress.com/api/v1';
+const LEAP_API_KEY = process.env.LEAP_API_KEY;
 
 // Validate required environment variables
 if (!process.env.LEAP_API_KEY) {
   console.error('Error: LEAP_API_KEY environment variable is not set');
   process.exit(1);
+}
+
+// Helper function to find existing customer
+async function findCustomer(customerData) {
+  try {
+    console.log('Attempting to find customer with data:', customerData);
+    console.log('Using API URL:', `${LEAP_API_BASE_URL}/customers`);
+    console.log('Using API Key:', LEAP_API_KEY ? 'API Key is set' : 'API Key is missing');
+
+    const response = await axios.get(`${LEAP_API_BASE_URL}/customers`, {
+      headers: {
+        'Authorization': `Bearer ${LEAP_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      params: {
+        email: customerData.emails[0]?.email,
+        phone: customerData.phoneNumbers[0]?.number
+      }
+    });
+
+    console.log('API Response:', response.data);
+    return response.data.customers[0] || null;
+  } catch (error) {
+    console.error('Error finding customer:', error.message);
+    console.error('Error details:', error.response ? error.response.data : 'No response data');
+    throw error;
+  }
+}
+
+// Helper function to create new customer
+async function createCustomer(customerData) {
+  try {
+    console.log('Attempting to create customer with data:', customerData);
+    const customerPayload = {
+      first_name: customerData.firstName,
+      last_name: customerData.lastName,
+      email: customerData.emails[0]?.email,
+      phone: customerData.phoneNumbers[0]?.number,
+      address: {
+        street: customerData.street,
+        city: customerData.city,
+        state: customerData.state,
+        zip: customerData.zipCode
+      }
+    };
+
+    console.log('Customer payload:', customerPayload);
+    const response = await axios.post(`${LEAP_API_BASE_URL}/customers`, customerPayload, {
+      headers: {
+        'Authorization': `Bearer ${LEAP_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Create customer response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating customer:', error.message);
+    console.error('Error details:', error.response ? error.response.data : 'No response data');
+    throw error;
+  }
+}
+
+// Helper function to create job
+async function createJob(customerId, estimateData) {
+  try {
+    console.log('Attempting to create job for customer:', customerId);
+    console.log('Estimate data:', estimateData);
+    
+    const jobPayload = {
+      customer_id: customerId,
+      name: `SalesPro Estimate #${estimateData.id}`,
+      description: estimateData.resultNote,
+      status: estimateData.isSale ? 'sold' : 'no_sale',
+      total_amount: estimateData.saleAmount,
+      categories: estimateData.addedCategories
+    };
+
+    console.log('Job payload:', jobPayload);
+    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs`, jobPayload, {
+      headers: {
+        'Authorization': `Bearer ${LEAP_API_KEY}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    console.log('Create job response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error creating job:', error.message);
+    console.error('Error details:', error.response ? error.response.data : 'No response data');
+    throw error;
+  }
+}
+
+// Helper function to verify webhook signature
+function verifySignature(payload, signature, secret) {
+  // Implement your signature verification logic here
+  // This is a placeholder - you should implement proper signature verification
+  return true;
 }
 
 // Security middleware
@@ -40,10 +143,6 @@ app.use((req, res, next) => {
   console.log('Request Body:', req.body);
   next();
 });
-
-// Leap CRM API configuration
-const LEAP_API_BASE_URL = 'https://api.jobprogress.com/api/v1';
-const LEAP_API_KEY = process.env.LEAP_API_KEY;
 
 // Basic route for testing
 app.get('/', (req, res) => {
@@ -112,15 +211,6 @@ app.post('/webhook', [
     });
   }
 });
-
-// Helper function to verify webhook signature
-function verifySignature(payload, signature, secret) {
-  // Implement your signature verification logic here
-  // This is a placeholder - you should implement proper signature verification
-  return true;
-}
-
-// ... existing helper functions (findCustomer, createCustomer, createJob) ...
 
 // Error handling middleware
 app.use((err, req, res, next) => {
