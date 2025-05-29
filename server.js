@@ -9,116 +9,6 @@ const { body, validationResult } = require('express-validator');
 const app = express();
 const port = process.env.PORT || 10000;
 
-// Leap CRM API configuration
-const LEAP_API_BASE_URL = 'https://api.jobprogress.com/api/v1';
-const LEAP_API_KEY = process.env.LEAP_API_KEY;
-
-// Validate required environment variables
-if (!process.env.LEAP_API_KEY) {
-  console.error('Error: LEAP_API_KEY environment variable is not set');
-  process.exit(1);
-}
-
-// Helper function to find existing customer
-async function findCustomer(customerData) {
-  try {
-    console.log('Attempting to find customer with data:', customerData);
-    console.log('Using API URL:', `${LEAP_API_BASE_URL}/customers`);
-    console.log('Using API Key:', LEAP_API_KEY ? 'API Key is set' : 'API Key is missing');
-
-    const response = await axios.get(`${LEAP_API_BASE_URL}/customers`, {
-      headers: {
-        'Authorization': `Bearer ${LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      params: {
-        email: customerData.emails[0]?.email,
-        phone: customerData.phoneNumbers[0]?.number
-      }
-    });
-
-    console.log('API Response:', response.data);
-    return response.data.customers[0] || null;
-  } catch (error) {
-    console.error('Error finding customer:', error.message);
-    console.error('Error details:', error.response ? error.response.data : 'No response data');
-    throw error;
-  }
-}
-
-// Helper function to create new customer
-async function createCustomer(customerData) {
-  try {
-    console.log('Attempting to create customer with data:', customerData);
-    const customerPayload = {
-      first_name: customerData.firstName,
-      last_name: customerData.lastName,
-      email: customerData.emails[0]?.email,
-      phone: customerData.phoneNumbers[0]?.number,
-      address: {
-        street: customerData.street,
-        city: customerData.city,
-        state: customerData.state,
-        zip: customerData.zipCode
-      }
-    };
-
-    console.log('Customer payload:', customerPayload);
-    const response = await axios.post(`${LEAP_API_BASE_URL}/customers`, customerPayload, {
-      headers: {
-        'Authorization': `Bearer ${LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Create customer response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating customer:', error.message);
-    console.error('Error details:', error.response ? error.response.data : 'No response data');
-    throw error;
-  }
-}
-
-// Helper function to create job
-async function createJob(customerId, estimateData) {
-  try {
-    console.log('Attempting to create job for customer:', customerId);
-    console.log('Estimate data:', estimateData);
-    
-    const jobPayload = {
-      customer_id: customerId,
-      name: `SalesPro Estimate #${estimateData.id}`,
-      description: estimateData.resultNote,
-      status: estimateData.isSale ? 'sold' : 'no_sale',
-      total_amount: estimateData.saleAmount,
-      categories: estimateData.addedCategories
-    };
-
-    console.log('Job payload:', jobPayload);
-    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs`, jobPayload, {
-      headers: {
-        'Authorization': `Bearer ${LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    console.log('Create job response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating job:', error.message);
-    console.error('Error details:', error.response ? error.response.data : 'No response data');
-    throw error;
-  }
-}
-
-// Helper function to verify webhook signature
-function verifySignature(payload, signature, secret) {
-  // Implement your signature verification logic here
-  // This is a placeholder - you should implement proper signature verification
-  return true;
-}
-
 // Security middleware
 app.use(helmet());
 app.use(cors({
@@ -149,65 +39,96 @@ app.get('/', (req, res) => {
   res.send('Webhook server is running!');
 });
 
-// SalesPro webhook endpoint with validation
-app.post('/webhook', [
-  body('customer.firstName').notEmpty(),
-  body('customer.lastName').notEmpty(),
-  body('customer.emails').isArray(),
-  body('estimate.id').notEmpty()
-], async (req, res) => {
+// SalesPro webhook endpoint
+app.post('/webhook', async (req, res) => {
   try {
-    // Validate request
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
-    // Verify webhook signature if WEBHOOK_SECRET is set
-    if (process.env.WEBHOOK_SECRET) {
-      const signature = req.headers['x-salespro-signature'];
-      if (!signature || !verifySignature(req.body, signature, process.env.WEBHOOK_SECRET)) {
-        return res.status(401).json({ error: 'Invalid signature' });
-      }
-    }
-
-    console.log('Received webhook from SalesPro:', req.body);
+    console.log('Received webhook request:', JSON.stringify(req.body, null, 2));
     
+    // Validate request body
+    if (!req.body || !req.body.customer || !req.body.estimate) {
+      console.error('Invalid request body:', req.body);
+      return res.status(400).json({ error: 'Invalid request body' });
+    }
+
     const { customer, estimate } = req.body;
-    
-    if (!customer || !estimate) {
-      return res.status(400).json({ error: 'Missing required data' });
+
+    // Validate customer data
+    if (!customer.firstName || !customer.lastName) {
+      console.error('Missing required customer fields:', customer);
+      return res.status(400).json({ error: 'Missing required customer fields' });
     }
 
-    // First, try to find existing customer
-    const existingCustomer = await findCustomer(customer);
-    
-    let customerId;
-    if (existingCustomer) {
-      customerId = existingCustomer.id;
-      console.log('Found existing customer:', customerId);
-    } else {
-      // Create new customer
-      const newCustomer = await createCustomer(customer);
-      customerId = newCustomer.id;
-      console.log('Created new customer:', customerId);
+    // Validate estimate data
+    if (!estimate.id || estimate.saleAmount === undefined) {
+      console.error('Missing required estimate fields:', estimate);
+      return res.status(400).json({ error: 'Missing required estimate fields' });
     }
 
-    // Create job for the customer
-    const job = await createJob(customerId, estimate);
-    console.log('Created new job:', job.id);
+    // Create customer in Leap CRM
+    console.log('Creating customer in Leap CRM...');
+    const customerResponse = await axios.post(
+      'https://api.leapcrm.io/v1/customers',
+      {
+        first_name: customer.firstName,
+        last_name: customer.lastName,
+        email: customer.emails?.[0]?.email,
+        phone: customer.phoneNumbers?.[0]?.number,
+        address: {
+          street: customer.street,
+          city: customer.city,
+          state: customer.state,
+          zip: customer.zipCode
+        }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
 
-    res.status(200).json({ 
-      message: 'Successfully processed webhook',
-      customerId,
-      jobId: job.id
+    console.log('Customer created in Leap CRM:', customerResponse.data);
+
+    // Create estimate in Leap CRM
+    console.log('Creating estimate in Leap CRM...');
+    const estimateResponse = await axios.post(
+      'https://api.leapcrm.io/v1/estimates',
+      {
+        customer_id: customerResponse.data.id,
+        estimate_number: estimate.id,
+        notes: estimate.resultNote,
+        status: estimate.isSale ? 'sold' : 'pending',
+        total: estimate.saleAmount,
+        categories: estimate.addedCategories
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    console.log('Estimate created in Leap CRM:', estimateResponse.data);
+
+    res.status(200).json({
+      message: 'Webhook processed successfully',
+      customer: customerResponse.data,
+      estimate: estimateResponse.data
     });
-
   } catch (error) {
-    console.error('Error processing webhook:', error);
-    res.status(500).json({ 
-      error: 'Internal Server Error',
-      message: process.env.NODE_ENV === 'development' ? error.message : undefined
+    console.error('Error processing webhook:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      headers: error.response?.headers,
+      stack: error.stack
+    });
+    res.status(500).json({
+      error: 'Internal server error',
+      details: error.message,
+      response: error.response?.data
     });
   }
 });
