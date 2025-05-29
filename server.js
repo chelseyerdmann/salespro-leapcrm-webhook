@@ -177,6 +177,9 @@ app.post('/webhook', async (req, res) => {
 
     // Create customer in Leap CRM
     console.log('Creating customer in Leap CRM...');
+    console.log('Using API Key:', LEAP_API_KEY ? 'API Key is set' : 'API Key is missing');
+    console.log('API Key length:', LEAP_API_KEY ? LEAP_API_KEY.length : 0);
+    
     const customerResponse = await axios.post(
       `${LEAP_API_BASE_URL}/customers`,
       {
@@ -193,8 +196,9 @@ app.post('/webhook', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${LEAP_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       }
     );
@@ -215,8 +219,9 @@ app.post('/webhook', async (req, res) => {
       },
       {
         headers: {
-          'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${LEAP_API_KEY}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
         }
       }
     );
