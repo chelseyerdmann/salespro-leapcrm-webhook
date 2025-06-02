@@ -21,7 +21,7 @@ if (!process.env.LEAP_API_KEY) {
 } else {
   console.log('LEAP_API_KEY is set');
   console.log('LEAP_API_KEY length:', process.env.LEAP_API_KEY.length);
-  console.log('LEAP_API_KEY first 4 chars:', process.env.LEAP_API_KEY.substring(0, 4));
+  console.log('LEAP_API_KEY first 10 chars:', process.env.LEAP_API_KEY.substring(0, 10));
   console.log('LEAP_API_KEY last 4 chars:', process.env.LEAP_API_KEY.substring(process.env.LEAP_API_KEY.length - 4));
 }
 
@@ -56,14 +56,51 @@ app.use((req, res, next) => {
   next();
 });
 
+// Helper function to test API connectivity
+async function testAPIConnectivity() {
+  const authMethods = [
+    { name: 'Bearer', headers: { 'Authorization': `Bearer ${LEAP_API_KEY}`, 'Content-Type': 'application/json' } },
+    { name: 'X-API-Key', headers: { 'X-API-Key': LEAP_API_KEY, 'Content-Type': 'application/json' } },
+    { name: 'API-Key', headers: { 'API-Key': LEAP_API_KEY, 'Content-Type': 'application/json' } }
+  ];
+
+  console.log('Testing API connectivity...');
+  
+  for (const auth of authMethods) {
+    try {
+      const response = await axios.get(`${LEAP_API_BASE_URL}/customers?limit=1`, { 
+        headers: auth.headers,
+        timeout: 10000 
+      });
+      console.log(`✅ API connectivity SUCCESS with ${auth.name} authentication`);
+      return auth.headers; // Return working auth headers
+    } catch (error) {
+      console.log(`❌ API test failed with ${auth.name}:`, error.response?.status, error.response?.data?.error?.message);
+    }
+  }
+  
+  console.log('⚠️ No API authentication method worked - webhook will log data but may not create records');
+  return null;
+}
+
+// Store working auth headers
+let workingAuthHeaders = null;
+
+// Test API on startup
+testAPIConnectivity().then(headers => {
+  workingAuthHeaders = headers;
+});
+
 // Helper function to find existing customer
 async function findExistingCustomer(email, phone) {
+  if (!workingAuthHeaders) {
+    console.log('⚠️ No working auth headers - skipping customer search');
+    return null;
+  }
+
   try {
     const response = await axios.get('https://api.jobprogress.com/api/v1/customers', {
-      headers: {
-        'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
+      headers: workingAuthHeaders,
       params: {
         email: email,
         phone: phone
@@ -71,13 +108,19 @@ async function findExistingCustomer(email, phone) {
     });
     return response.data.data && response.data.data.length > 0 ? response.data.data[0] : null;
   } catch (error) {
-    console.error('Error finding customer:', error.message);
+    console.error('Error finding customer:', error.response?.status, error.response?.data);
     return null;
   }
 }
 
 // Helper function to create customer
 async function createCustomer(customerData) {
+  if (!workingAuthHeaders) {
+    console.log('⚠️ No working auth headers - logging customer data instead of creating');
+    console.log('Would create customer:', customerData);
+    return { simulated: true, data: { id: `simulated_${Date.now()}` } };
+  }
+
   try {
     const leapCustomer = {
       first_name: customerData.firstName,
@@ -93,20 +136,25 @@ async function createCustomer(customerData) {
     };
 
     const response = await axios.post('https://api.jobprogress.com/api/v1/customers', leapCustomer, {
-      headers: {
-        'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+      headers: workingAuthHeaders
     });
     return response.data;
   } catch (error) {
-    console.error('Error creating customer:', error.message);
+    console.error('Error creating customer:', error.response?.status, error.response?.data);
+    // Log the data for manual processing
+    console.log('MANUAL PROCESSING NEEDED - Customer data:', customerData);
     throw error;
   }
 }
 
 // Helper function to create job/estimate
 async function createJob(customerId, estimateData) {
+  if (!workingAuthHeaders) {
+    console.log('⚠️ No working auth headers - logging job data instead of creating');
+    console.log('Would create job for customer:', customerId, 'with data:', estimateData);
+    return { simulated: true, data: { id: `simulated_job_${Date.now()}` } };
+  }
+
   try {
     const leapJob = {
       customer_id: customerId,
@@ -118,14 +166,13 @@ async function createJob(customerId, estimateData) {
     };
 
     const response = await axios.post('https://api.jobprogress.com/api/v1/jobs', leapJob, {
-      headers: {
-        'Authorization': `Bearer ${process.env.LEAP_API_KEY}`,
-        'Content-Type': 'application/json'
-      }
+      headers: workingAuthHeaders
     });
     return response.data;
   } catch (error) {
-    console.error('Error creating job:', error.message);
+    console.error('Error creating job:', error.response?.status, error.response?.data);
+    // Log the data for manual processing
+    console.log('MANUAL PROCESSING NEEDED - Job data:', { customerId, estimateData });
     throw error;
   }
 }
@@ -140,8 +187,26 @@ app.get('/health', (req, res) => {
   res.json({ 
     status: 'healthy', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    apiConnectivity: workingAuthHeaders ? 'connected' : 'disconnected'
   });
+});
+
+// API test endpoint
+app.get('/test-api', async (req, res) => {
+  try {
+    const headers = await testAPIConnectivity();
+    res.json({
+      success: !!headers,
+      authMethod: headers ? Object.keys(headers).find(key => key.includes('Authorization') || key.includes('API')) : null,
+      message: headers ? 'API connectivity successful' : 'API connectivity failed'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
 });
 
 // Webhook endpoint - NO signature verification
@@ -164,6 +229,12 @@ app.post('/webhook', [
 
     console.log('Processing webhook request...');
     const { customer, estimate } = req.body;
+
+    // Always log the incoming data for debugging
+    console.log('=== WEBHOOK DATA RECEIVED ===');
+    console.log('Customer:', JSON.stringify(customer, null, 2));
+    console.log('Estimate:', JSON.stringify(estimate, null, 2));
+    console.log('================================');
 
     // Validate office alignment if both have officeId
     if (customer.officeId && estimate.officeId && customer.officeId !== estimate.officeId) {
@@ -195,20 +266,34 @@ app.post('/webhook', [
     const leapJob = await createJob(customerId, estimate);
     console.log('Created job:', leapJob.data ? leapJob.data.id : leapJob.id);
 
-    res.json({
+    // Success response
+    const response = {
       message: 'Webhook processed successfully',
       customer: leapCustomer,
-      job: leapJob
-    });
+      job: leapJob,
+      apiConnectivity: workingAuthHeaders ? 'connected' : 'simulated'
+    };
+
+    if (!workingAuthHeaders) {
+      response.warning = 'API connectivity issues - data logged for manual processing';
+    }
+
+    res.json(response);
 
   } catch (error) {
     console.error('Webhook processing error:', error.message);
     console.error('Error details:', error.response ? error.response.data : error);
 
+    // Always log the data for manual processing on error
+    console.log('=== ERROR - MANUAL PROCESSING NEEDED ===');
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('========================================');
+
     res.status(500).json({
       error: 'Internal server error',
       details: error.message,
-      response: error.response ? error.response.data : null
+      response: error.response ? error.response.data : null,
+      note: 'Data has been logged for manual processing'
     });
   }
 });
@@ -235,4 +320,6 @@ app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('Webhook endpoint: /webhook');
+  console.log('Health check: /health');
+  console.log('API test: /test-api');
 });
