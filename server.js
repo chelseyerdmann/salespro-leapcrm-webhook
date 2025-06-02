@@ -175,6 +175,18 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).json({ error: 'Missing required estimate fields' });
     }
 
+    // Validate office alignment
+    if (!estimate.officeId || !customer.officeId || estimate.officeId !== customer.officeId) {
+      console.error('Office validation failed:', {
+        customerOfficeId: customer.officeId,
+        estimateOfficeId: estimate.officeId
+      });
+      return res.status(400).json({ 
+        error: 'Office validation failed',
+        message: 'The office ID must match between customer and estimate'
+      });
+    }
+
     // Create customer in Leap CRM
     console.log('Creating customer in Leap CRM...');
     console.log('Using API Key:', LEAP_API_KEY ? 'API Key is set' : 'API Key is missing');
