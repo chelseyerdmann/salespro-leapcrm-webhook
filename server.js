@@ -122,11 +122,6 @@ function verifySignature(payload, signature, secret) {
 
 // Security middleware
 app.use(helmet());
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
-  methods: ['POST'],
-  allowedHeaders: ['Content-Type', 'x-salespro-signature']
-}));
 
 // Rate limiting
 const limiter = rateLimit({
