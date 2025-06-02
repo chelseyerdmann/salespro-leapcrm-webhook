@@ -128,14 +128,6 @@ The server provides detailed error responses:
 - JSON body parsing
 - Request logging
 
-## Recent Updates
-
-- Added office validation to ensure customer and estimate are assigned to the same office
-- Removed CORS configuration as it's not needed for direct API calls
-- Enhanced error logging for better debugging
-- Added detailed validation messages
-- Improved API response structure
-
 ## Troubleshooting
 
 ### Common Issues
