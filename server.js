@@ -175,15 +175,15 @@ async function createJob(customerId, estimateData) {
   try {
     const leapJob = {
       customer_id: customerId,
-      name: `Estimate ${estimateData.id}`,
-      description: estimateData.resultNote || 'Estimate from SalesPro',
-      status: estimateData.isSale ? 'sold' : 'estimate',
-      estimated_amount: estimateData.saleAmount || 0,
-      categories: estimateData.addedCategories || []
+      description: estimateData.resultNote || `Estimate ${estimateData.id}`,
+      'trades[]': 1 // Default trade ID - you may need to map estimate categories to trade IDs
     };
 
-    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs`, leapJob, {
-      headers: workingAuthHeaders
+    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs`, qs.stringify(leapJob), {
+      headers: {
+        ...workingAuthHeaders,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     });
     return response.data;
   } catch (error) {
