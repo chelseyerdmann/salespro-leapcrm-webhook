@@ -277,11 +277,18 @@ app.post('/webhook', [
       console.log('Created customer:', leapCustomer.data ? leapCustomer.data.id : leapCustomer.id);
     }
 
-    // Create job/estimate in Leap CRM
-    console.log('Creating job/estimate...');
+    // Create job/estimate in Leap CRM only if it's a sale
+    let leapJob = null;
     const customerId = leapCustomer.data ? leapCustomer.data.id : leapCustomer.id;
-    const leapJob = await createJob(customerId, estimate);
-    console.log('Created job:', leapJob.data ? leapJob.data.id : leapJob.id);
+    
+    if (estimate.isSale) {
+      console.log('Creating job/estimate for SOLD estimate...');
+      leapJob = await createJob(customerId, estimate);
+      console.log('Created job:', leapJob.data ? leapJob.data.id : leapJob.id);
+    } else {
+      console.log('Skipping job creation - estimate not sold (isSale: false)');
+      leapJob = { skipped: true, reason: 'Not a sale' };
+    }
 
     // Success response
     const response = {
@@ -290,6 +297,10 @@ app.post('/webhook', [
       job: leapJob,
       apiConnectivity: workingAuthHeaders ? 'connected' : 'simulated'
     };
+
+    if (!estimate.isSale) {
+      response.note = 'Job creation skipped - only creating jobs for sold estimates (isSale: true)';
+    }
 
     if (!workingAuthHeaders) {
       response.warning = 'API connectivity issues - data logged for manual processing';
