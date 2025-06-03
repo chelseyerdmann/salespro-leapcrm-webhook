@@ -130,7 +130,12 @@ async function createCustomer(customerData) {
       first_name: customerData.firstName,
       last_name: customerData.lastName,
       email: customerData.emails && customerData.emails[0] ? customerData.emails[0].email : '',
-      phones: customerData.phoneNumbers && customerData.phoneNumbers[0] ? customerData.phoneNumbers[0].number : '',
+      phones: customerData.phoneNumbers && customerData.phoneNumbers[0] ? [
+        {
+          label: 'primary',
+          number: customerData.phoneNumbers[0].number
+        }
+      ] : [],
       address: {
         street: customerData.street || '',
         city: customerData.city || '',
