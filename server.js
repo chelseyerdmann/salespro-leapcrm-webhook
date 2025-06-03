@@ -6,6 +6,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const qs = require('querystring');
+const FormData = require('form-data');
 
 const app = express();
 // Let Render set the port, fallback to 10000 for local development
@@ -194,6 +195,40 @@ async function createJob(customerId, estimateData) {
   }
 }
 
+// Helper function to upload PDF to job
+async function uploadPdfToJob(jobId, pdfUrl, fileName = null) {
+  if (!workingAuthHeaders) {
+    console.log('⚠️ No working auth headers - logging PDF upload instead');
+    console.log('Would upload PDF:', { jobId, pdfUrl, fileName });
+    return { simulated: true, message: 'PDF upload simulated' };
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('file_url', pdfUrl);
+    
+    if (fileName) {
+      // Limit filename to 30 characters as per API requirement
+      const truncatedName = fileName.length > 30 ? fileName.substring(0, 27) + '...' : fileName;
+      formData.append('file_name', truncatedName);
+    }
+
+    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs/${jobId}/work_orders/upload`, formData, {
+      headers: {
+        ...workingAuthHeaders,
+        ...formData.getHeaders()
+      }
+    });
+    
+    console.log('✅ PDF uploaded successfully:', response.data.data?.file_name);
+    return response.data;
+  } catch (error) {
+    console.error('Error uploading PDF:', error.response?.status, error.response?.data);
+    // Don't throw error - job creation should succeed even if PDF upload fails
+    return { error: true, message: 'PDF upload failed', details: error.response?.data };
+  }
+}
+
 // Root endpoint
 app.get('/', (req, res) => {
   res.send('Webhook server is running!');
@@ -285,6 +320,24 @@ app.post('/webhook', [
       console.log('Creating job/estimate for SOLD estimate...');
       leapJob = await createJob(customerId, estimate);
       console.log('Created job:', leapJob.data ? leapJob.data.id : leapJob.id);
+      
+      // Upload PDF if available
+      if (estimate.pdfUrl && !leapJob.simulated) {
+        console.log('Uploading PDF document to job...');
+        const jobId = leapJob.data ? leapJob.data.id : leapJob.id;
+        const pdfFileName = `estimate_${estimate.id}.pdf`;
+        const pdfUploadResult = await uploadPdfToJob(jobId, estimate.pdfUrl, pdfFileName);
+        
+        // Add PDF upload result to job data
+        if (leapJob.data) {
+          leapJob.data.pdfUpload = pdfUploadResult;
+        } else {
+          leapJob.pdfUpload = pdfUploadResult;
+        }
+      } else if (estimate.pdfUrl && leapJob.simulated) {
+        console.log('PDF URL provided but job creation was simulated - logging PDF info');
+        leapJob.pdfInfo = { url: estimate.pdfUrl, note: 'PDF upload would occur after real job creation' };
+      }
     } else {
       console.log('Skipping job creation - estimate not sold (isSale: false)');
       leapJob = { skipped: true, reason: 'Not a sale' };
