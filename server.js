@@ -61,7 +61,11 @@ async function testAPIConnectivity() {
   const authMethods = [
     { name: 'Bearer', headers: { 'Authorization': `Bearer ${LEAP_API_KEY}`, 'Content-Type': 'application/json' } },
     { name: 'X-API-Key', headers: { 'X-API-Key': LEAP_API_KEY, 'Content-Type': 'application/json' } },
-    { name: 'API-Key', headers: { 'API-Key': LEAP_API_KEY, 'Content-Type': 'application/json' } }
+    { name: 'API-Key', headers: { 'API-Key': LEAP_API_KEY, 'Content-Type': 'application/json' } },
+    { name: 'X-Auth-Token', headers: { 'X-Auth-Token': LEAP_API_KEY, 'Content-Type': 'application/json' } },
+    { name: 'Access-Token', headers: { 'Access-Token': LEAP_API_KEY, 'Content-Type': 'application/json' } },
+    { name: 'Token', headers: { 'Token': LEAP_API_KEY, 'Content-Type': 'application/json' } },
+    { name: 'Authorization-Direct', headers: { 'Authorization': LEAP_API_KEY, 'Content-Type': 'application/json' } }
   ];
 
   console.log('Testing API connectivity...');
