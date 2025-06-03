@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
+const qs = require('querystring');
 
 const app = express();
 // Let Render set the port, fallback to 10000 for local development
@@ -130,22 +131,19 @@ async function createCustomer(customerData) {
       first_name: customerData.firstName,
       last_name: customerData.lastName,
       email: customerData.emails && customerData.emails[0] ? customerData.emails[0].email : '',
-      phones: customerData.phoneNumbers && customerData.phoneNumbers[0] ? [
-        {
-          label: 'mobile',
-          number: customerData.phoneNumbers[0].number
-        }
-      ] : [],
-      address: {
-        street: customerData.street || '',
-        city: customerData.city || '',
-        state: customerData.state || '',
-        zip: customerData.zipCode || ''
-      }
+      'phones[0][label]': 'mobile',
+      'phones[0][number]': customerData.phoneNumbers && customerData.phoneNumbers[0] ? customerData.phoneNumbers[0].number : '',
+      'address[street]': customerData.street || '',
+      'address[city]': customerData.city || '',
+      'address[state]': customerData.state || '',
+      'address[zip]': customerData.zipCode || ''
     };
 
-    const response = await axios.post(`${LEAP_API_BASE_URL}/customers`, leapCustomer, {
-      headers: workingAuthHeaders
+    const response = await axios.post(`${LEAP_API_BASE_URL}/customers`, qs.stringify(leapCustomer), {
+      headers: {
+        ...workingAuthHeaders,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
     });
     return response.data;
   } catch (error) {
