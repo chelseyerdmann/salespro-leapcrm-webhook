@@ -11,7 +11,7 @@ const app = express();
 const port = process.env.PORT || 10000;
 
 // Leap CRM API configuration
-const LEAP_API_BASE_URL = 'https://api.jobprogress.com/api/v1';
+const LEAP_API_BASE_URL = 'https://api.jobprogress.com/api/v3';
 const LEAP_API_KEY = process.env.LEAP_API_KEY;
 
 // Validate required environment variables
@@ -103,7 +103,7 @@ async function findExistingCustomer(email, phone) {
   }
 
   try {
-    const response = await axios.get('https://api.jobprogress.com/api/v1/customers', {
+    const response = await axios.get(`${LEAP_API_BASE_URL}/customers`, {
       headers: workingAuthHeaders,
       params: {
         email: email,
@@ -139,7 +139,7 @@ async function createCustomer(customerData) {
       }
     };
 
-    const response = await axios.post('https://api.jobprogress.com/api/v1/customers', leapCustomer, {
+    const response = await axios.post(`${LEAP_API_BASE_URL}/customers`, leapCustomer, {
       headers: workingAuthHeaders
     });
     return response.data;
@@ -169,7 +169,7 @@ async function createJob(customerId, estimateData) {
       categories: estimateData.addedCategories || []
     };
 
-    const response = await axios.post('https://api.jobprogress.com/api/v1/jobs', leapJob, {
+    const response = await axios.post(`${LEAP_API_BASE_URL}/jobs`, leapJob, {
       headers: workingAuthHeaders
     });
     return response.data;
