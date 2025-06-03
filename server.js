@@ -118,6 +118,14 @@ async function findExistingCustomer(email, phone) {
   }
 }
 
+// Helper function to get state ID mapping
+function getStateId(stateCode) {
+  const stateMap = {
+    'CA': 3, 'TX': 43, 'FL': 10, 'NY': 33 // Add more states as needed
+  };
+  return stateMap[stateCode] || 1; // Default to 1 if state not found
+}
+
 // Helper function to create customer
 async function createCustomer(customerData) {
   if (!workingAuthHeaders) {
@@ -131,11 +139,13 @@ async function createCustomer(customerData) {
       first_name: customerData.firstName,
       last_name: customerData.lastName,
       email: customerData.emails && customerData.emails[0] ? customerData.emails[0].email : '',
-      'phones[0][label]': 'mobile',
+      is_commercial: 0, // Default to residential
+      'phones[0][label]': 'home',
       'phones[0][number]': customerData.phoneNumbers && customerData.phoneNumbers[0] ? customerData.phoneNumbers[0].number : '',
-      'address[street]': customerData.street || '',
+      'address[address]': customerData.street || '',
       'address[city]': customerData.city || '',
-      'address[state]': customerData.state || '',
+      'address[state_id]': customerData.state ? getStateId(customerData.state) : 1, // Default or lookup state ID
+      'address[country_id]': 1, // Default to US
       'address[zip]': customerData.zipCode || ''
     };
 
