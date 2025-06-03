@@ -132,7 +132,7 @@ async function createCustomer(customerData) {
       email: customerData.emails && customerData.emails[0] ? customerData.emails[0].email : '',
       phones: customerData.phoneNumbers && customerData.phoneNumbers[0] ? [
         {
-          label: 'primary',
+          label: 'mobile',
           number: customerData.phoneNumbers[0].number
         }
       ] : [],
